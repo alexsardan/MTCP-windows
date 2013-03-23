@@ -21,6 +21,7 @@
 
 #include <Windows.h>
 #include "winmtcp_main.h"
+#include <stdio.h>
 
 HANDLE ckpTimerHandle, ckpHeap;
 
@@ -36,7 +37,7 @@ DWORD WINAPI ckpThreadFunc(LPVOID lpParamater)
 	CHAR ckpMessage[] = "Application is creating a checkpoint now...\n";
 
 	param = (ckpThreadArgs_t*)lpParamater;
-	ckpTime.QuadPart = param->interval;
+	ckpTime.QuadPart = -10000000*param->interval;
 	if (HeapFree(ckpHeap, 0, param) == 0)
 		return 1;
 
@@ -53,7 +54,7 @@ DWORD WINAPI ckpThreadFunc(LPVOID lpParamater)
 		/* 
 		 * TODO: Checkpointing code goes here
 		 */
-		WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), ckpMessage, sizeof(ckpMessage), &nChars, NULL);
+		printf("%s\n", ckpMessage);
 
 		/* Rearm the timer */
 		if (SetWaitableTimer(ckpTimerHandle, &ckpTime, 0, NULL, NULL, FALSE) == 0)
@@ -67,13 +68,13 @@ DWORD WINAPI ckpThreadFunc(LPVOID lpParamater)
 /**
  * Init the checkpointing thread, timer and heap
  */
-int winmtcp_init (long long interval)
+__declspec(dllexport) int winmtcp_init (long long interval)
 {
 	HANDLE ckpThread;
 	LARGE_INTEGER ckpTime;	
 	ckpThreadArgs_t *ckpArgs;
 
-	ckpTime.QuadPart = interval;
+	ckpTime.QuadPart = -10000000*interval;
 
 	/* create a timer that will be signaled when it's time to checkpoint */
     if ((ckpTimerHandle = CreateWaitableTimer(NULL, FALSE, NULL)) == NULL) 

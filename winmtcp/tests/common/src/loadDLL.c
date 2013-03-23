@@ -22,8 +22,6 @@
 #include <stdio.h>
 #include "../include/loadDLL.h"
 
-typedef int (*ckpInitFunc_t) (long long);
-
 HINSTANCE LoadDLL (char *filename)
 {
 	DWORD err;

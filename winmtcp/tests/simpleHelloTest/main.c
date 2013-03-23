@@ -23,11 +23,19 @@
 #include <stdio.h>
 #include "../common/include/loadDLL.h"
 
+typedef int (*ckpInitFunc_t) (long long);
+
 int main (int argc, char **argv)
 {
 	HINSTANCE lib;
 	unsigned long long i;
+	ckpInitFunc_t mtcpInit;
 	if ((lib = LoadDLL ("winmtcp.dll")) == NULL)
+		return 1;
+	mtcpInit = (ckpInitFunc_t) GetProcAddress (lib, "winmtcp_init");
+	if (mtcpInit == NULL)
+		return 1;
+	if (mtcpInit (1ll) == -1)
 		return 1;
 	printf ("Hello World\n");
 	for (i = 0; i < 3000000000ull; i++);
