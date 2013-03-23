@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "winmtcp", "winmtcp\winmtcp.vcxproj", "{B9CFA828-F1D3-4BF3-BA67-9A044E4714E2}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "simpleHelloTest", "tests\simpleHelloTest\simpleHelloTest.vcxproj", "{1D403426-5591-42A8-A53B-A2A91B1E7A18}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B9CFA828-F1D3-4BF3-BA67-9A044E4714E2}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B9CFA828-F1D3-4BF3-BA67-9A044E4714E2}.Debug|Win32.Build.0 = Debug|Win32
+		{B9CFA828-F1D3-4BF3-BA67-9A044E4714E2}.Release|Win32.ActiveCfg = Release|Win32
+		{B9CFA828-F1D3-4BF3-BA67-9A044E4714E2}.Release|Win32.Build.0 = Release|Win32
+		{1D403426-5591-42A8-A53B-A2A91B1E7A18}.Debug|Win32.ActiveCfg = Debug|Win32
+		{1D403426-5591-42A8-A53B-A2A91B1E7A18}.Debug|Win32.Build.0 = Debug|Win32
+		{1D403426-5591-42A8-A53B-A2A91B1E7A18}.Release|Win32.ActiveCfg = Release|Win32
+		{1D403426-5591-42A8-A53B-A2A91B1E7A18}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
