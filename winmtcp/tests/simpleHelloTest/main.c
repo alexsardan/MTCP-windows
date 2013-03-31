@@ -28,16 +28,21 @@ typedef int (*ckpInitFunc_t) (long long);
 int main (int argc, char **argv)
 {
 	HINSTANCE lib;
-	unsigned long long i;
+	unsigned long long i, j;
 	ckpInitFunc_t mtcpInit;
 	if ((lib = LoadDLL ("winmtcp.dll")) == NULL)
 		return 1;
 	mtcpInit = (ckpInitFunc_t) GetProcAddress (lib, "winmtcp_init");
 	if (mtcpInit == NULL)
 		return 1;
-	if (mtcpInit (1ll) == -1)
+	if (mtcpInit (4ll) == -1)
 		return 1;
 	printf ("Hello World\n");
-	for (i = 0; i < 3000000000ull; i++);
+	for (i = 0; i < 100ull; i++) {
+		printf ("%d\n", i);
+		j = 0;
+		//sleep a little
+		while (j++ < 10000000000ul);
+	}
 	return 0;
 }

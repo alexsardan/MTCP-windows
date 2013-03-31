@@ -6,6 +6,7 @@
 typedef struct 
 {
 	long long interval;
+	HANDLE mainThread;
 } ckpThreadArgs_t;
 
 #endif
