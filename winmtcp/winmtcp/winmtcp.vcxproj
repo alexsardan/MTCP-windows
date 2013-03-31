@@ -81,17 +81,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.c" />
-    <ClCompile Include="syscalls.c" />
     <ClCompile Include="winmtcp_main.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="syscalls.h" />
-    <ClInclude Include="win7Syscalls.h" />
-    <ClInclude Include="win8Syscalls.h" />
     <ClInclude Include="winmtcp_main.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="SyscallReadme.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

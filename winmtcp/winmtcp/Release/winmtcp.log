@@ -1,9 +1,5 @@
-﻿Build started 3/23/2013 4:59:02 PM.
-     1>Project "C:\Users\Alex\Documents\GitHub\MTCP-windows\winmtcp\winmtcp\winmtcp.vcxproj" on node 2 (Clean target(s)).
-     1>_PrepareForClean:
-         Deleting file "Release\winmtcp.lastbuildstate".
-     1>Done Building Project "C:\Users\Alex\Documents\GitHub\MTCP-windows\winmtcp\winmtcp\winmtcp.vcxproj" (Clean target(s)).
+﻿Build started 3/23/2013 3:09:14 PM.
 
 Build succeeded.
 
-Time Elapsed 00:00:00.02
+Time Elapsed 00:00:00.01
