@@ -44,6 +44,7 @@ int createCheckpoint(HANDLE mainThread) {
 	int ret;
 	FILE *chkptFile, *log;
 	CONTEXT threadContext;
+	chkptMemInfo_t chkptMemInfo; 
 
 	/* create checkpoint file */
 	/*
@@ -130,19 +131,28 @@ int createCheckpoint(HANDLE mainThread) {
 		}
 
 		errorFlag = ReadProcessMemory(procHandle, meminfo.BaseAddress, memoryBuffer, meminfo.RegionSize, &bytesRead);
+		
 		/* check status of process memory reading */
 		if (errorFlag == 0) 
 		{
 			fprintf(log, "Size read : 0x%08x\n", bytesRead);
 			fprintf(log, "Reading process memory failed with error %d\n", GetLastError());
+			chkptMemInfo.hasData = FALSE;
 		}
 		else 
 		{
 			fprintf(log, "Succesfully read process memory\n");
-			elWritten = fwrite (&meminfo, sizeof(meminfo), 1, chkptFile);
-			if (elWritten != 1)
-				fprintf(log, "Failed writing memory info on disk\n");
+			chkptMemInfo.hasData = TRUE;
+		}
 
+		chkptMemInfo.meminfo = meminfo;
+
+		/* write data on disk */
+		elWritten = fwrite (&chkptMemInfo, sizeof(chkptMemInfo), 1, chkptFile);
+		if (elWritten != 1)
+			fprintf(log, "Failed writing memory basic info on disk\n");
+
+		if (chkptMemInfo.hasData == TRUE) {
 			elWritten = fwrite (memoryBuffer, sizeof(char), bytesRead, chkptFile);
 			if (elWritten < bytesRead)
 				fprintf(log, "Failed writing entire process memory on file\n");
