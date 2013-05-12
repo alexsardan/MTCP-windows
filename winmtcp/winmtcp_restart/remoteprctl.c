@@ -27,6 +27,39 @@
 #include "remoteprctl.h"
 #include "utils.h"
 
+BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION memInfo, void *buff, BOOL hasBuffer) 
+{
+	SIZE_T bytesWritten;
+	LPVOID retAddr;
+
+	if ((retAddr = VirtualAllocEx(procInfo.hProcess, memInfo.BaseAddress, 
+		 memInfo.RegionSize, memInfo.State, memInfo.Protect)) == NULL)
+	{
+		printf("ERROR (code %d): Cannot allocate memory in remote process.\n", GetLastError());
+		return FALSE;
+	}
+
+	if (retAddr != memInfo.BaseAddress)
+	{
+		printf("ERROR: Memory was not allocated in the right place 0x%08x vs 0x%08x.\n", retAddr, memInfo.BaseAddress);
+		return FALSE;
+	}
+
+	if (WriteProcessMemory(procInfo.hProcess, memInfo.BaseAddress, buff, memInfo.RegionSize, &bytesWritten) == 0)
+	{
+		printf("ERROR (code %d): Cannot write remote process memory.\n", GetLastError());
+		return FALSE;
+	}
+
+	if (bytesWritten != memInfo.RegionSize)
+	{
+		printf("ERROR: Cannot write all memory in remote process.\n");
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 /* Clears a remote process' memory */
 BOOL clearTargetMemory (PROCESS_INFORMATION procInfo)
 {

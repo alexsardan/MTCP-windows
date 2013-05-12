@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "remoteprctl.h"
+#include "../winmtcp/winmctp_createChkpt.h"
 
 void createDummyProcess (PROCESS_INFORMATION *procInfo)
 {
@@ -43,6 +44,18 @@ void createDummyProcess (PROCESS_INFORMATION *procInfo)
 int main (int argc, char **argv)
 {
 	PROCESS_INFORMATION procInfo;
+	CONTEXT threadContext;
+	chkptMemInfo_t chkptMemInfo;
+	void *memBuffer = NULL;
+	SIZE_T bufferSize = 0;
+	FILE *pFile;
+	int nread;
+
+	if (argc < 2) 
+	{
+		printf("Usage: %s <checkpoint_file>\n", argv[0]);
+		exit(1);
+	}
 
 	/* create a dummy process that will have it's address space replaced */
 	createDummyProcess (&procInfo);
@@ -51,6 +64,45 @@ int main (int argc, char **argv)
 	if (!clearTargetMemory (procInfo))
 		exit (1);
 	printf ("Process memory cleared!\n");
+
+	pFile = fopen (argv[1], "rb");
+	if (pFile == NULL) {
+		printf ("Error opening file: %s\n", argv[1]);
+		exit(1);
+	}
+
+	nread = fread (&threadContext, sizeof(threadContext), 1, pFile);
+	if (nread != 1) {
+		printf ("Problem reading threadcontext.\n");
+		fclose(pFile);
+		exit(1);
+	}
+
+	while (!feof(pFile)) {
+		nread = fread (&chkptMemInfo, sizeof(chkptMemInfo), 1, pFile);
+		if (nread != 1) {
+			printf ("Problem reading threadcontext: %d.\n", nread);
+			fclose(pFile);
+			exit(1);
+		}
+
+		if (bufferSize <  chkptMemInfo.meminfo.RegionSize) 
+		{ 
+			memBuffer = realloc(memBuffer, chkptMemInfo.meminfo.RegionSize * sizeof(char));
+			bufferSize = chkptMemInfo.meminfo.RegionSize;
+		}
+
+		if (chkptMemInfo.hasData == TRUE) {
+			nread = fread (memBuffer, sizeof(char), bufferSize, pFile);
+			if (nread != bufferSize) {
+				printf ("Problem reading data.\n");
+				fclose(pFile);
+				exit(1);
+			}
+		}
+	}
+
+	fclose (pFile);
 
 	// Wait until child process exits.
 	WaitForSingleObject (procInfo.hProcess, INFINITE);
