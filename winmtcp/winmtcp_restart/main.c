@@ -24,6 +24,12 @@
 #include <stdio.h>
 #include "remoteprctl.h"
 #include "../winmtcp/winmctp_createChkpt.h"
+#include "util\list.h"
+
+typedef struct {
+	chkptMemInfo_t *chkptMemInfo;
+	void *memBuffer;
+} list_entry;
 
 void createDummyProcess (PROCESS_INFORMATION *procInfo)
 {
@@ -45,11 +51,20 @@ int main (int argc, char **argv)
 {
 	PROCESS_INFORMATION procInfo;
 	CONTEXT threadContext;
-	chkptMemInfo_t chkptMemInfo;
+	chkptMemInfo_t *chkptMemInfo;
 	void *memBuffer = NULL;
 	SIZE_T bufferSize = 0;
 	FILE *pFile;
+	SYSTEM_INFO si;
 	int nread;
+	list_entry *entry, *tempEntry;
+	ULONG_PTR oldAllocationBase = 0x0;
+	list_t memInfoList;
+	SIZE_T allocationSize = 0x0;
+	int i;
+	node_t *current;
+
+	list_init (&memInfoList);
 
 	if (argc < 2) 
 	{
@@ -79,30 +94,70 @@ int main (int argc, char **argv)
 	}
 
 	while (!feof(pFile)) {
-		nread = fread (&chkptMemInfo, sizeof(chkptMemInfo), 1, pFile);
+		entry = (list_entry *) malloc(sizeof(list_entry));
+		chkptMemInfo = (chkptMemInfo_t *) malloc (sizeof(chkptMemInfo_t));
+
+		nread = fread (chkptMemInfo, sizeof(chkptMemInfo_t), 1, pFile);
 		if (nread != 1) {
 			printf ("Problem reading threadcontext: %d.\n", nread);
 			fclose(pFile);
 			exit(1);
 		}
 
-		if (bufferSize <  chkptMemInfo.meminfo.RegionSize) 
-		{ 
-			memBuffer = realloc(memBuffer, chkptMemInfo.meminfo.RegionSize * sizeof(char));
-			bufferSize = chkptMemInfo.meminfo.RegionSize;
-		}
+		memBuffer = malloc(chkptMemInfo->meminfo.RegionSize * sizeof(char));
 
-		if (chkptMemInfo.hasData == TRUE) {
-			nread = fread (memBuffer, sizeof(char), bufferSize, pFile);
-			if (nread != bufferSize) {
+		if (chkptMemInfo->hasData == TRUE) {
+			nread = fread (memBuffer, sizeof(char), chkptMemInfo->meminfo.RegionSize, pFile);
+			if (nread != chkptMemInfo->meminfo.RegionSize) {
 				printf ("Problem reading data.\n");
-				fclose(pFile);
-				exit(1);
+				//fclose(pFile);
+				//exit(1);
 			}
 		}
+
+		entry->chkptMemInfo = chkptMemInfo;
+		entry->memBuffer = memBuffer;
+
+		if (oldAllocationBase != ((ULONG_PTR) (chkptMemInfo->meminfo.AllocationBase))) 
+		{
+			current = memInfoList.head;
+			
+			if (memInfoList.size != 0) {
+
+				tempEntry = (list_entry*)current->data;
+
+				/* allocate memory for the remote process */
+				allocTargetMemory(procInfo, tempEntry->chkptMemInfo->meminfo, allocationSize);
+				oldAllocationBase = chkptMemInfo->meminfo.AllocationBase;
+			
+				/* set protections and write data */
+				for (i = 0; i < memInfoList.size; i++)
+				{
+					tempEntry = (list_entry*)current->data;
+					chkptMemInfo = tempEntry->chkptMemInfo;
+					memBuffer = tempEntry->memBuffer;
+
+					if (!setTargetMemory(procInfo, chkptMemInfo->meminfo, memBuffer, chkptMemInfo->hasData))
+					{
+						printf("error\n");
+						//exit(1);
+					}
+					current = current->next;
+				}
+				/* clear list */
+				list_clear(&memInfoList);
+				allocationSize = 0;
+			}
+		}
+
+		/* insert new mem info in the list */
+		list_insert_back(&memInfoList, entry);
+		allocationSize += entry->chkptMemInfo->meminfo.RegionSize;
 	}
 
 	fclose (pFile);
+	SetThreadContext(procInfo.hThread, &threadContext);
+	ResumeThread(procInfo.hThread);
 
 	// Wait until child process exits.
 	WaitForSingleObject (procInfo.hProcess, INFINITE);

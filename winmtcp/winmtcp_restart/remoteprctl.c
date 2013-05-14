@@ -27,15 +27,20 @@
 #include "remoteprctl.h"
 #include "utils.h"
 
-BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION memInfo, void *buff, BOOL hasBuffer) 
+MEMORY_BASIC_INFORMATION oldMemInfo;
+
+BOOL allocTargetMemory(PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION memInfo, SIZE_T allocSize) 
 {
-	SIZE_T bytesWritten;
 	LPVOID retAddr;
 
-	if ((retAddr = VirtualAllocEx(procInfo.hProcess, memInfo.BaseAddress, 
-		 memInfo.RegionSize, memInfo.State, memInfo.Protect)) == NULL)
+		/* check if only reserving memory */
+	if (memInfo.State == MEM_RESERVE)
+		memInfo.Protect = PAGE_NOACCESS;
+
+	if ((retAddr = VirtualAllocEx(procInfo.hProcess, memInfo.AllocationBase, 
+		allocSize, MEM_RESERVE, memInfo.Protect)) == NULL)
 	{
-		printf("ERROR (code %d): Cannot allocate memory in remote process.\n", GetLastError());
+		printf("ERROR (code %d): Cannot allocate memory in remote process: 0x%08x.\n", GetLastError(), memInfo.AllocationBase);
 		return FALSE;
 	}
 
@@ -44,18 +49,76 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 		printf("ERROR: Memory was not allocated in the right place 0x%08x vs 0x%08x.\n", retAddr, memInfo.BaseAddress);
 		return FALSE;
 	}
+}
 
-	if (WriteProcessMemory(procInfo.hProcess, memInfo.BaseAddress, buff, memInfo.RegionSize, &bytesWritten) == 0)
+BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION memInfo, void *buff, BOOL hasBuffer) 
+{
+	SIZE_T bytesWritten;
+	LPVOID retAddr;
+	BOOL removeWrite = FALSE;
+	DWORD oldProtect;
+	DWORD dummyProtect;
+
+	if (memInfo.State != MEM_RESERVE)
+	{	
+		if ((retAddr = VirtualAllocEx(procInfo.hProcess, memInfo.BaseAddress, 
+			memInfo.RegionSize, MEM_COMMIT, memInfo.Protect)) == NULL)
+		{
+			printf("ERROR (code %d): Cannot COMMIT memory in remote process: 0x%08x.\n", GetLastError(), memInfo.BaseAddress);
+			return FALSE;
+		}
+
+		if (retAddr != memInfo.BaseAddress)
+		{
+			printf("ERROR: Memory was not allocated in the right place 0x%08x vs 0x%08x.\n", retAddr, memInfo.BaseAddress);
+			return FALSE;
+		}
+	}
+	else
+		return TRUE;
+
+	/* check if must write data to a READONLY page and temporally add write permissions */
+	if (hasBuffer)
 	{
-		printf("ERROR (code %d): Cannot write remote process memory.\n", GetLastError());
+		if (!(memInfo.Protect & PAGE_READWRITE)) 
+		{
+			removeWrite = TRUE;
+			oldProtect = memInfo.Protect;
+			memInfo.Protect &= ~PAGE_READONLY;
+			memInfo.Protect |= PAGE_READWRITE;
+		}
+	}
+
+	if(!VirtualProtectEx(procInfo.hProcess, memInfo.BaseAddress, memInfo.RegionSize, memInfo.Protect, &dummyProtect))
+	{
+		printf ("ERROR (code %d): Cannot change protection to region: 0x%08x.\n", GetLastError(), memInfo.BaseAddress);
 		return FALSE;
 	}
 
-	if (bytesWritten != memInfo.RegionSize)
+	if (hasBuffer) 
 	{
-		printf("ERROR: Cannot write all memory in remote process.\n");
-		return FALSE;
+		if (WriteProcessMemory(procInfo.hProcess, memInfo.BaseAddress, buff, memInfo.RegionSize, &bytesWritten) == 0)
+		{
+			printf("ERROR (code %d): Cannot write remote process memory.\n", GetLastError());
+			return FALSE;
+		}
+
+		if (bytesWritten != memInfo.RegionSize)
+		{
+			printf("ERROR: Cannot write all memory in remote process.\n");
+			return FALSE;
+		}
+
+		if (removeWrite) {
+			if(!VirtualProtectEx(procInfo.hProcess, memInfo.BaseAddress, memInfo.RegionSize, oldProtect, &dummyProtect))
+			{
+				printf ("ERROR (code %d): Cannot change protection to region: 0x%08x.\n", GetLastError(), memInfo.BaseAddress);
+				return FALSE;
+			}
+		}
 	}
+
+	oldMemInfo = memInfo;
 
 	return TRUE;
 }
@@ -92,7 +155,7 @@ BOOL clearTargetMemory (PROCESS_INFORMATION procInfo)
 
 	/* get userspace address space limits */
 	GetSystemInfo(&sysInfo);
-	targetEndAddr = (ULONG_PTR) sysInfo.lpMaximumApplicationAddress;
+	targetEndAddr = 0x7FFE0000;//(ULONG_PTR) sysInfo.lpMaximumApplicationAddress;
 	currentAddr = (ULONG_PTR) sysInfo.lpMinimumApplicationAddress;
 
 	while (currentAddr < targetEndAddr)

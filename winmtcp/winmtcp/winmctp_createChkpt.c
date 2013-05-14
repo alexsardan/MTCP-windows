@@ -131,6 +131,9 @@ int createCheckpoint(HANDLE mainThread) {
 		}
 
 		errorFlag = ReadProcessMemory(procHandle, meminfo.BaseAddress, memoryBuffer, meminfo.RegionSize, &bytesRead);
+		if (meminfo.RegionSize != bytesRead ) {
+			fprintf(log, "Failed reading entire region size : 0x%08x 0x%08x\n", bytesRead, meminfo.RegionSize);
+		}
 		
 		/* check status of process memory reading */
 		if (errorFlag == 0) 
