@@ -39,7 +39,7 @@ void createDummyProcess (PROCESS_INFORMATION *procInfo)
 	procSi.cb = sizeof(STARTUPINFO);
 	ZeroMemory (procInfo, sizeof(PROCESS_INFORMATION));
 
-	if( !CreateProcess (NULL, "dummyproc.exe", NULL, NULL, FALSE, 
+	if( !CreateProcess (NULL, "dummyproc.exe", NULL, NULL, TRUE, 
 						CREATE_SUSPENDED, NULL, NULL, &procSi, procInfo)) 
     {
         printf ("Process creation failed: Error %d.\n", GetLastError());
@@ -99,9 +99,10 @@ int main (int argc, char **argv)
 
 		nread = fread (chkptMemInfo, sizeof(chkptMemInfo_t), 1, pFile);
 		if (nread != 1) {
-			printf ("Problem reading threadcontext: %d.\n", nread);
-			fclose(pFile);
-			exit(1);
+			printf ("Problem reading chkpt mem info: %d.\n", nread);
+			//fclose(pFile);
+			//exit(1);
+			break;
 		}
 
 		memBuffer = malloc(chkptMemInfo->meminfo.RegionSize * sizeof(char));

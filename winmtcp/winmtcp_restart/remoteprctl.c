@@ -59,6 +59,17 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 	DWORD oldProtect;
 	DWORD dummyProtect;
 
+	/* check if memory region has a protection flag not supported by VirtualAllocEx */
+	if (memInfo.Protect == PAGE_EXECUTE_WRITECOPY)
+	{
+		memInfo.Protect = PAGE_EXECUTE_READWRITE;
+	}
+	if (memInfo.Protect == PAGE_WRITECOPY)
+	{
+		memInfo.Protect = PAGE_READWRITE;
+	}
+
+
 	if (memInfo.State != MEM_RESERVE)
 	{	
 		if ((retAddr = VirtualAllocEx(procInfo.hProcess, memInfo.BaseAddress, 
@@ -77,15 +88,27 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 	else
 		return TRUE;
 
+	if (memInfo.BaseAddress == 0x331000) {
+		int debug = 1;
+	}
+
 	/* check if must write data to a READONLY page and temporally add write permissions */
 	if (hasBuffer)
 	{
-		if (!(memInfo.Protect & PAGE_READWRITE)) 
+		if ( (!(memInfo.Protect & PAGE_READWRITE)) && (!(memInfo.Protect & PAGE_EXECUTE_READWRITE)) ) 
 		{
 			removeWrite = TRUE;
 			oldProtect = memInfo.Protect;
-			memInfo.Protect &= ~PAGE_READONLY;
-			memInfo.Protect |= PAGE_READWRITE;
+			/* READONLY page */
+			if (memInfo.Protect & PAGE_READONLY) {
+				memInfo.Protect &= ~PAGE_READONLY;
+				memInfo.Protect |= PAGE_READWRITE;
+			}
+			/* EXECUTE_READ page */
+			if (memInfo.Protect & PAGE_EXECUTE_READ) {
+				memInfo.Protect &= ~PAGE_EXECUTE_READ;
+				memInfo.Protect |= PAGE_EXECUTE_READWRITE;
+			}
 		}
 	}
 
@@ -169,11 +192,13 @@ BOOL clearTargetMemory (PROCESS_INFORMATION procInfo)
 		}
 
 		/* don't unmap ntdll.dll */
+		/*
 		if ((memInfo.AllocationBase == ntDllModule) || (memInfo.BaseAddress == ntDllModule))
 		{
 			currentAddr += memInfo.RegionSize;
 			continue;
 		}
+		*/
 
 		/* memory already free */
 		if (memInfo.State == MEM_FREE)
