@@ -24,12 +24,15 @@
 #include "../common/include/loadDLL.h"
 
 typedef int (*ckpInitFunc_t) (long long);
+int theInt;
 
 int main (int argc, char **argv)
 {
 	HINSTANCE lib;
 	unsigned long long i, j;
 	ckpInitFunc_t mtcpInit;
+	theInt = 0;
+	printf("Adresa lui theInt este: %p", &theInt);
 	if ((lib = LoadDLL ("winmtcp.dll")) == NULL)
 		return 1;
 	mtcpInit = (ckpInitFunc_t) GetProcAddress (lib, "winmtcp_init");
@@ -37,10 +40,11 @@ int main (int argc, char **argv)
 		return 1;
 	if (mtcpInit (4ll) == -1)
 		return 1;
-	printf ("Hello World\n");
+	//printf ("Hello World\n");
 	for (i = 0; i < 100ull; i++) {
 		printf ("%d\n", i);
 		j = 0;
+		theInt++;
 		//sleep a little
 		while (j++ < 10000000000ul);
 	}

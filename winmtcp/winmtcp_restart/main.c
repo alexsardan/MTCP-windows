@@ -37,7 +37,9 @@ void createDummyProcess (PROCESS_INFORMATION *procInfo)
 
 	ZeroMemory (&procSi, sizeof(STARTUPINFO));
 	procSi.cb = sizeof(STARTUPINFO);
+	procSi.dwFlags |= STARTF_USESTDHANDLES;
 	ZeroMemory (procInfo, sizeof(PROCESS_INFORMATION));
+
 
 	if( !CreateProcess (NULL, "dummyproc.exe", NULL, NULL, TRUE, 
 						CREATE_SUSPENDED, NULL, NULL, &procSi, procInfo)) 
@@ -160,11 +162,11 @@ int main (int argc, char **argv)
 	SetThreadContext(procInfo.hThread, &threadContext);
 	ResumeThread(procInfo.hThread);
 
-	// Wait until child process exits.
+	/*// Wait until child process exits.
 	WaitForSingleObject (procInfo.hProcess, INFINITE);
 
     // Close process and thread handles. 
     CloseHandle (procInfo.hProcess);
-    CloseHandle (procInfo.hThread);
+    CloseHandle (procInfo.hThread);*/
 	return 0;
 }

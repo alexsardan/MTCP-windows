@@ -69,6 +69,18 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 		memInfo.Protect = PAGE_READWRITE;
 	}
 
+	if (memInfo.BaseAddress == 0x7efdb000) {
+		return TRUE;
+	}
+
+	if (memInfo.BaseAddress == 0x7efde000) {
+		return TRUE;
+	}
+
+	if (memInfo.BaseAddress == 0x7efdf000) {
+		return TRUE;
+	}
+
 
 	if (memInfo.State != MEM_RESERVE)
 	{	
@@ -87,10 +99,6 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 	}
 	else
 		return TRUE;
-
-	if (memInfo.BaseAddress == 0x331000) {
-		int debug = 1;
-	}
 
 	/* check if must write data to a READONLY page and temporally add write permissions */
 	if (hasBuffer)

@@ -84,7 +84,12 @@ int createCheckpoint(HANDLE mainThread) {
 	}
 
 	/* save main thread's context */
-	GetThreadContext(mainThread, &threadContext);
+	threadContext.ContextFlags = CONTEXT_ALL;
+	errorFlag = GetThreadContext(mainThread, &threadContext);
+	if (!errorFlag) {
+		printf("Problem to get thread context: %d\n", GetLastError());
+		return 1;
+	}
 
 	/* write thread context on disk */
 	elWritten = fwrite (&threadContext, sizeof(threadContext), 1, chkptFile);
@@ -171,7 +176,7 @@ int createCheckpoint(HANDLE mainThread) {
 	fclose(log);
 	free (memoryBuffer);
 
-	/* suspend main thread */
+	/* resume main thread */
 	ret = ResumeThread(mainThread);
 	if (ret == ((DWORD) - 1)) 
 	{
