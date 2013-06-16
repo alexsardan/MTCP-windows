@@ -18,9 +18,17 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  ****************************************************************************/
+enum SpecialAttr
+{
+	noAttr,
+	peb,
+	teb
+};
+
 typedef struct {
 	MEMORY_BASIC_INFORMATION meminfo;
 	BOOL hasData;
+	enum SpecialAttr attr;
 } chkptMemInfo_t;
 
 

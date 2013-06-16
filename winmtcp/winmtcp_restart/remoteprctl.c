@@ -27,13 +27,18 @@
 #include "remoteprctl.h"
 #include "utils.h"
 
+extern HMODULE ntDllModule;
+extern PROCESS_BASIC_INFORMATION dummyProcInfo;
+extern ULONG_PTR dummyMainTEBAddr;
+extern CONTEXT threadContext;
 MEMORY_BASIC_INFORMATION oldMemInfo;
 
 BOOL allocTargetMemory(PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION memInfo, SIZE_T allocSize) 
 {
 	LPVOID retAddr;
+	BOOL ret;
 
-		/* check if only reserving memory */
+	/* check if only reserving memory */
 	if (memInfo.State == MEM_RESERVE)
 		memInfo.Protect = PAGE_NOACCESS;
 
@@ -69,15 +74,11 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 		memInfo.Protect = PAGE_READWRITE;
 	}
 
-	if (memInfo.BaseAddress == 0x7efdb000) {
+	if (memInfo.BaseAddress == 0x7f7f6000) {
 		return TRUE;
 	}
 
-	if (memInfo.BaseAddress == 0x7efde000) {
-		return TRUE;
-	}
-
-	if (memInfo.BaseAddress == 0x7efdf000) {
+	if (memInfo.BaseAddress == 0x7f7ff000) {
 		return TRUE;
 	}
 
@@ -162,10 +163,8 @@ BOOL clearTargetMemory (PROCESS_INFORMATION procInfo)
 	list_t fileViewAddrList;
 	DWORD err;
 	ULONG_PTR targetEndAddr, currentAddr;
-	HMODULE ntDllModule;
 	UnmapViewOfFileRemoteFp unmapViewOfFileRemote;
-	
-	ntDllModule = GetModuleHandle("ntdll.dll");
+	BOOL ret;
 
 	if (ntDllModule != NULL)
 	{
@@ -207,6 +206,17 @@ BOOL clearTargetMemory (PROCESS_INFORMATION procInfo)
 			continue;
 		}
 		*/
+
+		/* Don't try to unmap the PEB or the main TEB of the dummy process */
+		if ((memInfo.AllocationBase == dummyProcInfo.PebBaseAddress) || 
+			(memInfo.BaseAddress == dummyProcInfo.PebBaseAddress) ||
+			((ULONG_PTR) memInfo.AllocationBase == (dummyMainTEBAddr - 0x2000)) || 
+			((ULONG_PTR) memInfo.BaseAddress == (dummyMainTEBAddr - 0x2000)))
+		{
+			printf ("Found TEB/PEB and not unmaping\n");
+			currentAddr += memInfo.RegionSize;
+			continue;
+		}
 
 		/* memory already free */
 		if (memInfo.State == MEM_FREE)

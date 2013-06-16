@@ -23,6 +23,8 @@
 
 int main (int argc, char **argv)
 {
+	while(TRUE);
+	/*
 	DWORD tid;
 	HANDLE thisThread;
 
@@ -34,4 +36,5 @@ int main (int argc, char **argv)
 	if (SuspendThread(thisThread) == -1)
 		return 1;
 	return 0;
+	*/
 }

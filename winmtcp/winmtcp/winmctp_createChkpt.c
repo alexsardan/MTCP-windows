@@ -21,10 +21,14 @@
 
 #include <Windows.h>
 #include <stdio.h>
+#include <winternl.h>
 #include "winmctp_createChkpt.h"
 
 #define CHKPT_FILE_NAME_L L"checkpoint.mtcp"
 #define CHKPT_FILE_NAME "checkpoint.mtcp"
+
+extern PROCESS_BASIC_INFORMATION procInfo;
+extern ULONG_PTR mainTEBAddr;
 
 /* creates a checkpoint for the current process
  * returns 0 if succesfully created checkpoint,
@@ -154,6 +158,12 @@ int createCheckpoint(HANDLE mainThread) {
 		}
 
 		chkptMemInfo.meminfo = meminfo;
+		if (meminfo.BaseAddress == procInfo.PebBaseAddress)
+			chkptMemInfo.attr = peb;
+		else if (((ULONG_PTR) meminfo.BaseAddress) == (mainTEBAddr - 0x2000))
+			chkptMemInfo.attr = teb;
+		else
+			chkptMemInfo.attr = noAttr;
 
 		/* write data on disk */
 		elWritten = fwrite (&chkptMemInfo, sizeof(chkptMemInfo), 1, chkptFile);

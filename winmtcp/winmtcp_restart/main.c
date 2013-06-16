@@ -22,14 +22,23 @@
 #include <Windows.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <winternl.h>
 #include "remoteprctl.h"
 #include "../winmtcp/winmctp_createChkpt.h"
 #include "util\list.h"
+
+#pragma comment(lib, "ntdll");
 
 typedef struct {
 	chkptMemInfo_t *chkptMemInfo;
 	void *memBuffer;
 } list_entry;
+
+HMODULE ntDllModule;
+PROCESS_BASIC_INFORMATION dummyProcInfo;
+ULONG_PTR dummyMainTEBAddr;
+	CONTEXT threadContext;
+
 
 void createDummyProcess (PROCESS_INFORMATION *procInfo)
 {
@@ -47,26 +56,27 @@ void createDummyProcess (PROCESS_INFORMATION *procInfo)
         printf ("Process creation failed: Error %d.\n", GetLastError());
         exit (1);
     }
+	//Sleep(1000);
+	//SuspendThread(procInfo->hThread);
 }
 
 int main (int argc, char **argv)
 {
 	PROCESS_INFORMATION procInfo;
-	CONTEXT threadContext;
+
 	chkptMemInfo_t *chkptMemInfo;
 	void *memBuffer = NULL;
-	SIZE_T bufferSize = 0;
+	SIZE_T bufferSize = 0, allocationSize = 0x0;
 	FILE *pFile;
 	SYSTEM_INFO si;
-	int nread;
+	int nread, i;
 	list_entry *entry, *tempEntry;
 	ULONG_PTR oldAllocationBase = 0x0;
 	list_t memInfoList;
-	SIZE_T allocationSize = 0x0;
-	int i;
+	NTSTATUS stat;
 	node_t *current;
-
-	list_init (&memInfoList);
+	PVOID infoBuff;
+	BOOL ret;
 
 	if (argc < 2) 
 	{
@@ -74,13 +84,39 @@ int main (int argc, char **argv)
 		exit(1);
 	}
 
+	/* Get a handle to ntdll.dll. We will use it to access the Nt* syscalls */
+	ntDllModule = GetModuleHandle("ntdll.dll");
+	if (ntDllModule == NULL)
+	{
+		printf("ERROR (code %d): Cannot get handle to ntdll.dll.\n", GetLastError());
+		return 1;
+	}
+
+	list_init (&memInfoList);
+
 	/* create a dummy process that will have it's address space replaced */
 	createDummyProcess (&procInfo);
 	FlushInstructionCache (procInfo.hProcess, NULL, 0);
 
-	if (!clearTargetMemory (procInfo))
-		exit (1);
-	printf ("Process memory cleared!\n");
+	/* Get information about the PEB from the dummy process */
+	stat = NtQueryInformationProcess(procInfo.hProcess, ProcessBasicInformation, 
+									 &dummyProcInfo, sizeof(PROCESS_BASIC_INFORMATION), NULL);
+	if (!NT_SUCCESS(stat)) {
+		printf ("ERROR (code 0x%x): Cannot get information about about the PEB. \n", stat);
+		return 1;
+	}
+	printf ("PEB address of dummy is: 0x%08x\n", dummyProcInfo.PebBaseAddress);
+
+	/* Get the address of the dummy process main TEB */
+	infoBuff = malloc(0x1C);
+	stat = NtQueryInformationThread(procInfo.hThread, (THREADINFOCLASS) 0, infoBuff, 0x1C, NULL);
+	if (!NT_SUCCESS(stat)) {
+		printf ("ERROR (code 0x%x): Cannot get information about about the main TEB. \n", stat);
+		return 1;
+	}
+	dummyMainTEBAddr = *((ULONG_PTR*)(((char*)infoBuff)+sizeof(NTSTATUS)));
+	free(infoBuff);
+	printf ("TEB address of dummy main thread is: 0x%08x\n", dummyMainTEBAddr);
 
 	pFile = fopen (argv[1], "rb");
 	if (pFile == NULL) {
@@ -94,6 +130,10 @@ int main (int argc, char **argv)
 		fclose(pFile);
 		exit(1);
 	}
+
+	if (!clearTargetMemory (procInfo))
+		exit (1);
+	printf ("Process memory cleared!\n");
 
 	while (!feof(pFile)) {
 		entry = (list_entry *) malloc(sizeof(list_entry));
@@ -130,8 +170,19 @@ int main (int argc, char **argv)
 				tempEntry = (list_entry*)current->data;
 
 				/* allocate memory for the remote process */
-				allocTargetMemory(procInfo, tempEntry->chkptMemInfo->meminfo, allocationSize);
-				oldAllocationBase = chkptMemInfo->meminfo.AllocationBase;
+
+				if (tempEntry->chkptMemInfo->attr == noAttr) {
+					allocTargetMemory(procInfo, tempEntry->chkptMemInfo->meminfo, allocationSize);
+					oldAllocationBase = (ULONG_PTR) chkptMemInfo->meminfo.AllocationBase;
+				} else {
+					printf ("Found PEB/TEB 0x%08x\n", tempEntry->chkptMemInfo->meminfo.BaseAddress);
+					if (tempEntry->chkptMemInfo->attr == teb) {
+						ret = WriteProcessMemory(procInfo.hProcess, (LPVOID) dummyMainTEBAddr, 
+									   ((LPCVOID)(((ULONG_PTR)tempEntry->memBuffer) + 0x2000)), 12, NULL);
+						if (!ret)
+							printf ("ERROR (code 0x%x): Cannot write the TEB. \n", GetLastError());
+					}
+				}
 			
 				/* set protections and write data */
 				for (i = 0; i < memInfoList.size; i++)
@@ -140,10 +191,12 @@ int main (int argc, char **argv)
 					chkptMemInfo = tempEntry->chkptMemInfo;
 					memBuffer = tempEntry->memBuffer;
 
-					if (!setTargetMemory(procInfo, chkptMemInfo->meminfo, memBuffer, chkptMemInfo->hasData))
-					{
-						printf("error\n");
-						//exit(1);
+					if (chkptMemInfo->attr == noAttr) {
+						if (!setTargetMemory(procInfo, chkptMemInfo->meminfo, memBuffer, chkptMemInfo->hasData))
+						{
+							printf("error\n");
+							//exit(1);
+						}
 					}
 					current = current->next;
 				}
@@ -159,7 +212,10 @@ int main (int argc, char **argv)
 	}
 
 	fclose (pFile);
-	SetThreadContext(procInfo.hThread, &threadContext);
+
+	ret = SetThreadContext(procInfo.hThread, &threadContext);
+	if (!ret)
+		printf ("Naspa!\n");
 	ResumeThread(procInfo.hThread);
 
 	/*// Wait until child process exits.

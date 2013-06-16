@@ -20,11 +20,17 @@
 ****************************************************************************/
 
 #include <Windows.h>
+#include <winternl.h>
 #include <stdio.h>
 #include "winmtcp_main.h"
 #include "winmctp_createChkpt.h"
 
+#pragma comment(lib, "ntdll");
+
 HANDLE ckpTimerHandle, ckpHeap;
+PROCESS_BASIC_INFORMATION procInfo;
+ULONG_PTR mainTEBAddr;
+HANDLE hProcess;
 
 /**
 * The checkpointing thread.
@@ -83,6 +89,9 @@ __declspec(dllexport) int winmtcp_init (long long interval)
 	HANDLE ckpThread;
 	LARGE_INTEGER ckpTime;	
 	ckpThreadArgs_t *ckpArgs;
+	NTSTATUS stat;
+	DWORD procId;
+	PVOID infoBuff;
 
 	ckpTime.QuadPart = -10000000*interval;
 
@@ -107,6 +116,36 @@ __declspec(dllexport) int winmtcp_init (long long interval)
 		printf("egal\n");
 	else
 		printf("not egal\n");
+
+	/* Get the current process handle */
+	procId = GetCurrentProcessId();
+	hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, procId);
+	if (!hProcess)
+	{
+		printf ("ERROR (code 0x%x): Cannot get current process handle. \n", GetLastError());
+		exit(1);
+	}
+
+	/* Get information about the PEB from the current process */
+	stat = NtQueryInformationProcess(hProcess, ProcessBasicInformation, 
+									 &procInfo, sizeof(PROCESS_BASIC_INFORMATION), NULL);
+	if (!NT_SUCCESS(stat)) {
+		printf ("ERROR (code 0x%x): Cannot get information about about the PEB. \n", stat);
+		return 1;
+	}
+	printf ("PEB address of dummy is: 0x%08x\n", procInfo.PebBaseAddress);
+
+	/* Get the address of the dummy process main TEB */
+	infoBuff = malloc(0x1C);
+	stat = NtQueryInformationThread(ckpArgs->mainThread, (THREADINFOCLASS) 0, infoBuff, 0x1C, NULL);
+	if (!NT_SUCCESS(stat)) {
+		printf ("ERROR (code 0x%x): Cannot get information about about the main TEB. \n", stat);
+		return 1;
+	}
+	mainTEBAddr = *((ULONG_PTR*)(((char*)infoBuff)+sizeof(NTSTATUS)));
+	free(infoBuff);
+	printf ("TEB address of dummy main thread is: 0x%08x\n", mainTEBAddr);
+	//CloseHandle(hProcess);
 
 	/* create the checkpointing thread that will handle the timer */
 	if ((ckpThread = CreateThread(NULL, 0, ckpThreadFunc, ckpArgs, 0, NULL)) == NULL)
