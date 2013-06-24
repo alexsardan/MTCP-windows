@@ -22,8 +22,10 @@
 #include <Windows.h>
 #include <winternl.h>
 #include <stdio.h>
+#include <intrin.h>
 #include "winmtcp_main.h"
 #include "winmctp_createChkpt.h"
+
 
 #pragma comment(lib, "ntdll");
 
@@ -112,10 +114,6 @@ __declspec(dllexport) int winmtcp_init (long long interval)
 
 	ckpArgs->interval = interval;
 	ckpArgs->mainThread = OpenThread(THREAD_ALL_ACCESS, FALSE, GetCurrentThreadId());
-	if (ckpArgs->mainThread == GetCurrentThread())
-		printf("egal\n");
-	else
-		printf("not egal\n");
 
 	/* Get the current process handle */
 	procId = GetCurrentProcessId();
@@ -133,18 +131,20 @@ __declspec(dllexport) int winmtcp_init (long long interval)
 		printf ("ERROR (code 0x%x): Cannot get information about about the PEB. \n", stat);
 		return 1;
 	}
-	printf ("PEB address of dummy is: 0x%08x\n", procInfo.PebBaseAddress);
+	printf ("\nPEB address of dummy is: 0x%p\n", procInfo.PebBaseAddress);
 
 	/* Get the address of the dummy process main TEB */
-	infoBuff = malloc(0x1C);
-	stat = NtQueryInformationThread(ckpArgs->mainThread, (THREADINFOCLASS) 0, infoBuff, 0x1C, NULL);
+	infoBuff = malloc(sizeof(THREAD_BASIC_INFORMATION));
+	stat = NtQueryInformationThread(ckpArgs->mainThread, (THREADINFOCLASS) 0, infoBuff, sizeof(THREAD_BASIC_INFORMATION), NULL);
 	if (!NT_SUCCESS(stat)) {
 		printf ("ERROR (code 0x%x): Cannot get information about about the main TEB. \n", stat);
 		return 1;
 	}
-	mainTEBAddr = *((ULONG_PTR*)(((char*)infoBuff)+sizeof(NTSTATUS)));
+
+	mainTEBAddr = (ULONG_PTR)((PTHREAD_BASIC_INFORMATION)infoBuff)->TebBaseAddress;
 	free(infoBuff);
-	printf ("TEB address of dummy main thread is: 0x%08x\n", mainTEBAddr);
+	printf ("TEB address of dummy main thread is: 0x%p\n", mainTEBAddr);
+
 	//CloseHandle(hProcess);
 
 	/* create the checkpointing thread that will handle the timer */

@@ -51,13 +51,13 @@ void createDummyProcess (PROCESS_INFORMATION *procInfo)
 
 
 	if( !CreateProcess (NULL, "dummyproc.exe", NULL, NULL, TRUE, 
-						CREATE_SUSPENDED, NULL, NULL, &procSi, procInfo)) 
+						0, NULL, NULL, &procSi, procInfo)) 
     {
         printf ("Process creation failed: Error %d.\n", GetLastError());
         exit (1);
     }
-	//Sleep(1000);
-	//SuspendThread(procInfo->hThread);
+	Sleep(1000);
+	SuspendThread(procInfo->hThread);
 }
 
 int main (int argc, char **argv)
@@ -68,8 +68,8 @@ int main (int argc, char **argv)
 	void *memBuffer = NULL;
 	SIZE_T bufferSize = 0, allocationSize = 0x0;
 	FILE *pFile;
-	SYSTEM_INFO si;
-	int nread, i;
+	size_t nread;
+	int i;
 	list_entry *entry, *tempEntry;
 	ULONG_PTR oldAllocationBase = 0x0;
 	list_t memInfoList;
@@ -105,18 +105,18 @@ int main (int argc, char **argv)
 		printf ("ERROR (code 0x%x): Cannot get information about about the PEB. \n", stat);
 		return 1;
 	}
-	printf ("PEB address of dummy is: 0x%08x\n", dummyProcInfo.PebBaseAddress);
+	printf ("PEB address of dummy is: 0x%p\n", dummyProcInfo.PebBaseAddress);
 
 	/* Get the address of the dummy process main TEB */
-	infoBuff = malloc(0x1C);
-	stat = NtQueryInformationThread(procInfo.hThread, (THREADINFOCLASS) 0, infoBuff, 0x1C, NULL);
+	infoBuff = malloc(sizeof(THREAD_BASIC_INFORMATION));
+	stat = NtQueryInformationThread(procInfo.hThread, (THREADINFOCLASS) 0, infoBuff, sizeof(THREAD_BASIC_INFORMATION), NULL);
 	if (!NT_SUCCESS(stat)) {
 		printf ("ERROR (code 0x%x): Cannot get information about about the main TEB. \n", stat);
 		return 1;
 	}
-	dummyMainTEBAddr = *((ULONG_PTR*)(((char*)infoBuff)+sizeof(NTSTATUS)));
+	dummyMainTEBAddr = (ULONG_PTR)((PTHREAD_BASIC_INFORMATION)infoBuff)->TebBaseAddress;
 	free(infoBuff);
-	printf ("TEB address of dummy main thread is: 0x%08x\n", dummyMainTEBAddr);
+	printf ("TEB address of dummy main thread is: 0x%p\n", dummyMainTEBAddr);
 
 	pFile = fopen (argv[1], "rb");
 	if (pFile == NULL) {
@@ -175,10 +175,10 @@ int main (int argc, char **argv)
 					allocTargetMemory(procInfo, tempEntry->chkptMemInfo->meminfo, allocationSize);
 					oldAllocationBase = (ULONG_PTR) chkptMemInfo->meminfo.AllocationBase;
 				} else {
-					printf ("Found PEB/TEB 0x%08x\n", tempEntry->chkptMemInfo->meminfo.BaseAddress);
+					printf ("Found PEB/TEB 0x%p\n", tempEntry->chkptMemInfo->meminfo.BaseAddress);
 					if (tempEntry->chkptMemInfo->attr == teb) {
 						ret = WriteProcessMemory(procInfo.hProcess, (LPVOID) dummyMainTEBAddr, 
-									   ((LPCVOID)(((ULONG_PTR)tempEntry->memBuffer) + 0x2000)), 12, NULL);
+									   ((LPCVOID)(((ULONG_PTR)tempEntry->memBuffer))), 24, NULL);
 						if (!ret)
 							printf ("ERROR (code 0x%x): Cannot write the TEB. \n", GetLastError());
 					}

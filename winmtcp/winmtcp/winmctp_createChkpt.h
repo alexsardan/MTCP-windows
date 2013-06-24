@@ -18,6 +18,16 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  ****************************************************************************/
+#ifndef CREATECHKPT_H
+#define CREATECHKPT_H
+
+#ifdef _WIN64
+#define TIB_ADDR_OFFSET 0x30
+#else
+#define TIB_ADDR_OFFSET 0x18
+#endif
+
+
 enum SpecialAttr
 {
 	noAttr,
@@ -34,3 +44,4 @@ typedef struct {
 
 int createCheckpoint(HANDLE mainThread);
 
+#endif

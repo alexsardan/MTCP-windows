@@ -45,15 +45,17 @@ BOOL allocTargetMemory(PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION me
 	if ((retAddr = VirtualAllocEx(procInfo.hProcess, memInfo.AllocationBase, 
 		allocSize, MEM_RESERVE, memInfo.Protect)) == NULL)
 	{
-		printf("ERROR (code %d): Cannot allocate memory in remote process: 0x%08x.\n", GetLastError(), memInfo.AllocationBase);
+		printf("ERROR (code %d): Cannot allocate memory in remote process: 0x%p.\n", GetLastError(), memInfo.AllocationBase);
 		return FALSE;
 	}
 
 	if (retAddr != memInfo.BaseAddress)
 	{
-		printf("ERROR: Memory was not allocated in the right place 0x%08x vs 0x%08x.\n", retAddr, memInfo.BaseAddress);
+		printf("WARNING: Memory was not allocated in the right place 0x%p vs 0x%p.\n", retAddr, memInfo.BaseAddress);
 		return FALSE;
 	}
+
+	return TRUE;
 }
 
 BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION memInfo, void *buff, BOOL hasBuffer) 
@@ -74,6 +76,7 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 		memInfo.Protect = PAGE_READWRITE;
 	}
 
+	/*
 	if (memInfo.BaseAddress == 0x7f7f6000) {
 		return TRUE;
 	}
@@ -81,20 +84,20 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 	if (memInfo.BaseAddress == 0x7f7ff000) {
 		return TRUE;
 	}
-
+	*/
 
 	if (memInfo.State != MEM_RESERVE)
 	{	
 		if ((retAddr = VirtualAllocEx(procInfo.hProcess, memInfo.BaseAddress, 
 			memInfo.RegionSize, MEM_COMMIT, memInfo.Protect)) == NULL)
 		{
-			printf("ERROR (code %d): Cannot COMMIT memory in remote process: 0x%08x.\n", GetLastError(), memInfo.BaseAddress);
+			printf("ERROR (code %d): Cannot COMMIT memory in remote process: 0x%p.\n", GetLastError(), memInfo.BaseAddress);
 			return FALSE;
 		}
 
 		if (retAddr != memInfo.BaseAddress)
 		{
-			printf("ERROR: Memory was not allocated in the right place 0x%08x vs 0x%08x.\n", retAddr, memInfo.BaseAddress);
+			printf("ERROR: Memory was not allocated in the right place 0x%p vs 0x%p.\n", retAddr, memInfo.BaseAddress);
 			return FALSE;
 		}
 	}
@@ -123,7 +126,7 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 
 	if(!VirtualProtectEx(procInfo.hProcess, memInfo.BaseAddress, memInfo.RegionSize, memInfo.Protect, &dummyProtect))
 	{
-		printf ("ERROR (code %d): Cannot change protection to region: 0x%08x.\n", GetLastError(), memInfo.BaseAddress);
+		printf ("ERROR (code %d): Cannot change protection to region: 0x%p.\n", GetLastError(), memInfo.BaseAddress);
 		return FALSE;
 	}
 
@@ -144,7 +147,7 @@ BOOL setTargetMemory (PROCESS_INFORMATION procInfo, MEMORY_BASIC_INFORMATION mem
 		if (removeWrite) {
 			if(!VirtualProtectEx(procInfo.hProcess, memInfo.BaseAddress, memInfo.RegionSize, oldProtect, &dummyProtect))
 			{
-				printf ("ERROR (code %d): Cannot change protection to region: 0x%08x.\n", GetLastError(), memInfo.BaseAddress);
+				printf ("ERROR (code %d): Cannot change protection to region: 0x%p.\n", GetLastError(), memInfo.BaseAddress);
 				return FALSE;
 			}
 		}
@@ -185,7 +188,12 @@ BOOL clearTargetMemory (PROCESS_INFORMATION procInfo)
 
 	/* get userspace address space limits */
 	GetSystemInfo(&sysInfo);
+
+#ifdef _WIN64
+	targetEndAddr = 0x000007FFFFFE0000;
+#else
 	targetEndAddr = 0x7FFE0000;//(ULONG_PTR) sysInfo.lpMaximumApplicationAddress;
+#endif
 	currentAddr = (ULONG_PTR) sysInfo.lpMinimumApplicationAddress;
 
 	while (currentAddr < targetEndAddr)
@@ -210,10 +218,17 @@ BOOL clearTargetMemory (PROCESS_INFORMATION procInfo)
 		/* Don't try to unmap the PEB or the main TEB of the dummy process */
 		if ((memInfo.AllocationBase == dummyProcInfo.PebBaseAddress) || 
 			(memInfo.BaseAddress == dummyProcInfo.PebBaseAddress) ||
-			((ULONG_PTR) memInfo.AllocationBase == (dummyMainTEBAddr - 0x2000)) || 
-			((ULONG_PTR) memInfo.BaseAddress == (dummyMainTEBAddr - 0x2000)))
+			((ULONG_PTR) memInfo.AllocationBase == (dummyMainTEBAddr)) || 
+			((ULONG_PTR) memInfo.BaseAddress == (dummyMainTEBAddr)))
 		{
 			printf ("Found TEB/PEB and not unmaping\n");
+			currentAddr += memInfo.RegionSize;
+			continue;
+		}
+
+		/* Don't try to unmap WOW64 Shared User Data */
+		if ((ULONG_PTR)memInfo.AllocationBase == 0x7FFE0000)
+		{
 			currentAddr += memInfo.RegionSize;
 			continue;
 		}

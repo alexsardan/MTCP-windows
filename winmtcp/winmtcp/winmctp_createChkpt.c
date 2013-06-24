@@ -30,7 +30,17 @@
 extern PROCESS_BASIC_INFORMATION procInfo;
 extern ULONG_PTR mainTEBAddr;
 
-/* creates a checkpoint for the current process
+/**
+ * Get the address of the current thread's TEB.
+ * The _NT_TIB struct can be reffered throught the GS register
+ */
+ULONG_PTR getCurrentTEB()
+{
+	return ( ULONG_PTR ) __readgsqword(TIB_ADDR_OFFSET);
+}
+
+/**
+ * Creates a checkpoint for the current process
  * returns 0 if succesfully created checkpoint,
  * return -1 if error occured
  */
@@ -39,7 +49,7 @@ int createCheckpoint(HANDLE mainThread) {
 	//HANDLE hChkptFile;
 	HANDLE procHandle;
 	MEMORY_BASIC_INFORMATION meminfo;
-	ULONG addr = 0x00000000;
+	ULONG_PTR thisTeb, addr = 0x00000000;
 	SIZE_T size;
 	BOOL errorFlag;
 	char *memoryBuffer = NULL;
@@ -66,6 +76,9 @@ int createCheckpoint(HANDLE mainThread) {
 		printf("Unable to create file %s\n", CHKPT_FILE_NAME);
 		return;
 	}*/
+
+	/* Get the address of the checkpoint thread's TEB */
+	thisTeb = getCurrentTEB();
 
 	/* suspend main thread */
 	ret = SuspendThread(mainThread);
@@ -122,9 +135,20 @@ int createCheckpoint(HANDLE mainThread) {
 		}
 
 		/* compute next address to query */
-		addr = (ULONG)meminfo.BaseAddress + meminfo.RegionSize;
+		addr = (ULONG_PTR)meminfo.BaseAddress + meminfo.RegionSize;
+		
+		/* Don't save WOW64 Shared User Data */
+		if ((ULONG_PTR)meminfo.AllocationBase == 0x7FFE0000)
+			continue;
 
-		fprintf(log, "Adddress Range :0x%08x - 0x%08x\n", meminfo.BaseAddress, addr);
+		/* Don't save the checkpointing thread's TEB */
+		if ((ULONG_PTR)meminfo.AllocationBase == thisTeb)
+		{
+			printf ("Not saving current TEB\n");
+			continue;
+		}
+
+		fprintf(log, "Adddress Range :0x%p - 0x%p\n", meminfo.BaseAddress, addr);
 		if (meminfo.State == MEM_FREE)
 		{
 			fprintf(log, "Skipping free memory\n");
@@ -141,13 +165,13 @@ int createCheckpoint(HANDLE mainThread) {
 
 		errorFlag = ReadProcessMemory(procHandle, meminfo.BaseAddress, memoryBuffer, meminfo.RegionSize, &bytesRead);
 		if (meminfo.RegionSize != bytesRead ) {
-			fprintf(log, "Failed reading entire region size : 0x%08x 0x%08x\n", bytesRead, meminfo.RegionSize);
+			fprintf(log, "Failed reading entire region size : 0x%p 0x%p\n", bytesRead, meminfo.RegionSize);
 		}
 		
 		/* check status of process memory reading */
 		if (errorFlag == 0) 
 		{
-			fprintf(log, "Size read : 0x%08x\n", bytesRead);
+			fprintf(log, "Size read : 0x%p\n", bytesRead);
 			fprintf(log, "Reading process memory failed with error %d\n", GetLastError());
 			chkptMemInfo.hasData = FALSE;
 		}
@@ -159,9 +183,15 @@ int createCheckpoint(HANDLE mainThread) {
 
 		chkptMemInfo.meminfo = meminfo;
 		if (meminfo.BaseAddress == procInfo.PebBaseAddress)
+		{
+			printf ("Writting PEB...\n");
 			chkptMemInfo.attr = peb;
-		else if (((ULONG_PTR) meminfo.BaseAddress) == (mainTEBAddr - 0x2000))
+		}
+		else if (((ULONG_PTR) meminfo.BaseAddress) == (mainTEBAddr))
+		{
+			printf ("Writting main TEB...\n");
 			chkptMemInfo.attr = teb;
+		}
 		else
 			chkptMemInfo.attr = noAttr;
 

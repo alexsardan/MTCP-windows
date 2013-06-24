@@ -42,7 +42,7 @@ void list_print (list_t l)
 	node_t *current = l.head;
 	for (i = 0; i < l.size; i++)
 	{
-		printf ("%x\n", current->data);
+		printf ("%p\n", current->data);
 		current = current->next;
 	}
 }
