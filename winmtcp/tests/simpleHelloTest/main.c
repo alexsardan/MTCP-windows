@@ -26,6 +26,19 @@
 typedef int (*ckpInitFunc_t) (long long);
 int theInt;
 
+void printNum(int num)
+{
+	HANDLE hStdout;
+	DWORD ssize;
+	char buffer[65];
+
+	itoa(num, buffer, 10);
+	if( (hStdout = GetStdHandle(STD_OUTPUT_HANDLE)) == INVALID_HANDLE_VALUE )  
+		exit (1);
+	WriteFile(hStdout, buffer, strlen(buffer), &ssize, NULL);
+	//CloseHandle(hStdout);
+}
+
 int main (int argc, char **argv)
 {
 	HINSTANCE lib;
@@ -38,11 +51,11 @@ int main (int argc, char **argv)
 	mtcpInit = (ckpInitFunc_t) GetProcAddress (lib, "winmtcp_init");
 	if (mtcpInit == NULL)
 		return 1;
-	if (mtcpInit (4ll) == -1)
+	if (mtcpInit (30ll) == -1)
 		return 1;
 	//printf ("Hello World\n");
 	for (i = 0; i < 100ull; i++) {
-		printf ("%d\n", i);
+		printNum (i);
 		j = 0;
 		theInt++;
 		//sleep a little

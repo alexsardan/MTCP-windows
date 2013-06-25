@@ -23,6 +23,18 @@
 
 int main (int argc, char **argv)
 {
+	HANDLE hStdout;
+	DWORD ssize;
+	char buffer[3];
+	buffer[0] = 'c';
+	buffer[1] = '\n';
+	buffer[2] = '\0';
+
+	if( (hStdout = GetStdHandle(STD_OUTPUT_HANDLE)) == INVALID_HANDLE_VALUE )  
+		return 1;
+	WriteFile(hStdout, buffer, 2, &ssize, NULL);
+	//CloseHandle(hStdout);
+	
 	while(TRUE);
 	/*
 	DWORD tid;

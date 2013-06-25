@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <winternl.h>
+#include <stddef.h>
 #include "remoteprctl.h"
 #include "../winmtcp/winmctp_createChkpt.h"
 #include "util\list.h"
@@ -46,17 +47,17 @@ void createDummyProcess (PROCESS_INFORMATION *procInfo)
 
 	ZeroMemory (&procSi, sizeof(STARTUPINFO));
 	procSi.cb = sizeof(STARTUPINFO);
-	procSi.dwFlags |= STARTF_USESTDHANDLES;
+	//procSi.dwFlags |= STARTF_USESTDHANDLES;
 	ZeroMemory (procInfo, sizeof(PROCESS_INFORMATION));
 
 
-	if( !CreateProcess (NULL, "dummyproc.exe", NULL, NULL, TRUE, 
+	if( !CreateProcess (NULL, "dummyproc.exe", NULL, NULL, FALSE, 
 						0, NULL, NULL, &procSi, procInfo)) 
     {
         printf ("Process creation failed: Error %d.\n", GetLastError());
         exit (1);
     }
-	Sleep(1000);
+	Sleep(4000);
 	SuspendThread(procInfo->hThread);
 }
 
@@ -77,6 +78,8 @@ int main (int argc, char **argv)
 	node_t *current;
 	PVOID infoBuff;
 	BOOL ret;
+	RTL_USER_PROCESS_PARAMETERS_MTCP originalParams;
+	ULONG_PTR originalParamsPtr, newParamsPtr;
 
 	if (argc < 2) 
 	{
@@ -101,16 +104,24 @@ int main (int argc, char **argv)
 	/* Get information about the PEB from the dummy process */
 	stat = NtQueryInformationProcess(procInfo.hProcess, ProcessBasicInformation, 
 									 &dummyProcInfo, sizeof(PROCESS_BASIC_INFORMATION), NULL);
-	if (!NT_SUCCESS(stat)) {
+	if (!NT_SUCCESS(stat)) 
+	{
 		printf ("ERROR (code 0x%x): Cannot get information about about the PEB. \n", stat);
 		return 1;
 	}
 	printf ("PEB address of dummy is: 0x%p\n", dummyProcInfo.PebBaseAddress);
 
+	/* Get the address of the RTL_USER_PROCESS_PARAMETERS structure */
+	ReadProcessMemory(procInfo.hProcess, (LPCVOID)((ULONG_PTR)((PPEB_MTCP)dummyProcInfo.PebBaseAddress) + ((ULONG_PTR)&(((PEB_MTCP *) 0)->ProcessParameters))), &originalParamsPtr, sizeof(ULONG_PTR), NULL);
+
+	/* Get the original params of the created process */
+	ReadProcessMemory(procInfo.hProcess, (LPCVOID) originalParamsPtr, &originalParams, sizeof(RTL_USER_PROCESS_PARAMETERS_MTCP), NULL);
+
 	/* Get the address of the dummy process main TEB */
 	infoBuff = malloc(sizeof(THREAD_BASIC_INFORMATION));
 	stat = NtQueryInformationThread(procInfo.hThread, (THREADINFOCLASS) 0, infoBuff, sizeof(THREAD_BASIC_INFORMATION), NULL);
-	if (!NT_SUCCESS(stat)) {
+	if (!NT_SUCCESS(stat)) 
+	{
 		printf ("ERROR (code 0x%x): Cannot get information about about the main TEB. \n", stat);
 		return 1;
 	}
@@ -119,13 +130,15 @@ int main (int argc, char **argv)
 	printf ("TEB address of dummy main thread is: 0x%p\n", dummyMainTEBAddr);
 
 	pFile = fopen (argv[1], "rb");
-	if (pFile == NULL) {
+	if (pFile == NULL) 
+	{
 		printf ("Error opening file: %s\n", argv[1]);
 		exit(1);
 	}
 
 	nread = fread (&threadContext, sizeof(threadContext), 1, pFile);
-	if (nread != 1) {
+	if (nread != 1) 
+	{
 		printf ("Problem reading threadcontext.\n");
 		fclose(pFile);
 		exit(1);
@@ -135,12 +148,14 @@ int main (int argc, char **argv)
 		exit (1);
 	printf ("Process memory cleared!\n");
 
-	while (!feof(pFile)) {
+	while (!feof(pFile)) 
+	{
 		entry = (list_entry *) malloc(sizeof(list_entry));
 		chkptMemInfo = (chkptMemInfo_t *) malloc (sizeof(chkptMemInfo_t));
 
 		nread = fread (chkptMemInfo, sizeof(chkptMemInfo_t), 1, pFile);
-		if (nread != 1) {
+		if (nread != 1) 
+		{
 			printf ("Problem reading chkpt mem info: %d.\n", nread);
 			//fclose(pFile);
 			//exit(1);
@@ -149,9 +164,11 @@ int main (int argc, char **argv)
 
 		memBuffer = malloc(chkptMemInfo->meminfo.RegionSize * sizeof(char));
 
-		if (chkptMemInfo->hasData == TRUE) {
+		if (chkptMemInfo->hasData == TRUE) 
+		{
 			nread = fread (memBuffer, sizeof(char), chkptMemInfo->meminfo.RegionSize, pFile);
-			if (nread != chkptMemInfo->meminfo.RegionSize) {
+			if (nread != chkptMemInfo->meminfo.RegionSize) 
+			{
 				printf ("Problem reading data.\n");
 				//fclose(pFile);
 				//exit(1);
@@ -165,24 +182,32 @@ int main (int argc, char **argv)
 		{
 			current = memInfoList.head;
 			
-			if (memInfoList.size != 0) {
-
+			if (memInfoList.size != 0) 
+			{
 				tempEntry = (list_entry*)current->data;
 
 				/* allocate memory for the remote process */
-
-				if (tempEntry->chkptMemInfo->attr == noAttr) {
+				if (tempEntry->chkptMemInfo->attr == noAttr) 
 					allocTargetMemory(procInfo, tempEntry->chkptMemInfo->meminfo, allocationSize);
-					oldAllocationBase = (ULONG_PTR) chkptMemInfo->meminfo.AllocationBase;
-				} else {
+				else 
+				{
 					printf ("Found PEB/TEB 0x%p\n", tempEntry->chkptMemInfo->meminfo.BaseAddress);
-					if (tempEntry->chkptMemInfo->attr == teb) {
+					if (tempEntry->chkptMemInfo->attr == teb) 
+					{
 						ret = WriteProcessMemory(procInfo.hProcess, (LPVOID) dummyMainTEBAddr, 
 									   ((LPCVOID)(((ULONG_PTR)tempEntry->memBuffer))), 24, NULL);
 						if (!ret)
 							printf ("ERROR (code 0x%x): Cannot write the TEB. \n", GetLastError());
 					}
+					else if (tempEntry->chkptMemInfo->attr == peb)
+					{
+						newParamsPtr = *((ULONG_PTR*)((ULONG_PTR)tempEntry->memBuffer + ((ULONG_PTR)&(((PEB_MTCP *) 0)->ProcessParameters))));
+						ret = WriteProcessMemory(procInfo.hProcess, (LPVOID)((ULONG_PTR)((PPEB_MTCP)dummyProcInfo.PebBaseAddress) + ((ULONG_PTR)&(((PEB_MTCP *) 0)->ProcessParameters))), &newParamsPtr, sizeof(ULONG_PTR), NULL);
+						if (!ret)
+							printf ("ERROR (code 0x%x): Cannot write the address of RTL_USER_PROCESS_PARAMETERS into the PEB. \n", GetLastError());
+					}
 				}
+				oldAllocationBase = (ULONG_PTR) chkptMemInfo->meminfo.AllocationBase;
 			
 				/* set protections and write data */
 				for (i = 0; i < memInfoList.size; i++)
@@ -191,7 +216,8 @@ int main (int argc, char **argv)
 					chkptMemInfo = tempEntry->chkptMemInfo;
 					memBuffer = tempEntry->memBuffer;
 
-					if (chkptMemInfo->attr == noAttr) {
+					if (chkptMemInfo->attr == noAttr ) 
+					{
 						if (!setTargetMemory(procInfo, chkptMemInfo->meminfo, memBuffer, chkptMemInfo->hasData))
 						{
 							printf("error\n");
@@ -213,9 +239,19 @@ int main (int argc, char **argv)
 
 	fclose (pFile);
 
+	ret = WriteProcessMemory(procInfo.hProcess, (LPVOID)(newParamsPtr + ((ULONG_PTR)&(((RTL_USER_PROCESS_PARAMETERS_MTCP *) 0)->ConsoleHandle))), &originalParams.StdOutputHandle, sizeof(PVOID) + sizeof(ULONG) + 3*sizeof(HANDLE), NULL);
+	if (!ret)
+	{
+		printf ("ERROR (code 0x%x): Cannot cannot write the value of the STDOUT handle. \n", ret);
+		return 1;
+	}
+
 	ret = SetThreadContext(procInfo.hThread, &threadContext);
 	if (!ret)
-		printf ("Naspa!\n");
+	{
+		printf ("ERROR (code 0x%x): Cannot set remote thead context. \n", ret);
+		return 1;
+	}
 	ResumeThread(procInfo.hThread);
 
 	/*// Wait until child process exits.
